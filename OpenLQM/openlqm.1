@@ -1,0 +1,75 @@
+.\" Manpage for OpenLQM
+.TH OpenLQM 1 "September 2025" "1.0" "OpenLQM Manual"
+.SH NAME
+OpenLQM \- analyzes friction ridge images and returns latent quality metrics
+.SH SYNOPSIS
+.B OpenLQM
+[\-v | --verbose] [\-h | --headers] [(\-p | --ppi) <ppi>] InputFile
+.br
+.B OpenLQM
+[--version]
+.SH DESCRIPTION
+.B OpenLQM
+analyzes a friction ridge image and returns latent quality metric(s).
+
+For normal use, call without options with the name of a grayscale friction ridge image file. 
+When called without options, OpenLQM will return the following tab-separated text values:
+input filename, OQ (Overall Quality), VID (Value for ID), and VCMP (Value for Comparison).
+OQ is in the range [0-99]. VID and VCMP are each in the range [0-100].
+
+The resolution of the input image must be one of the following values, as measured in pixels
+per inch (ppi): 500, 1000, 2000, and 4000.
+
+Errors return values less than 0. OpenLQM returns errors if input files are not recognized
+image files, or if the file resolution is not an accepted value.
+
+When called in verbose mode (-v), OpenLQM will return the following tab-separated values:
+
+Column Header: Definition
+Name: Input filename
+OQ: OverallQuality
+VID: Value for ID
+VCMP: Value for comparison
+OC: Overall Clarity 
+Area_RYGB: Area of impression - red or better (sq.mm.)
+Area_YGB: Area of ridge flow - yellow or better (sq.mm.)
+Area_GB: Area of good ridge flow - green or better (sq.mm.)
+Area_B: Area of clear level-3 detail - blue or better (sq.mm.)
+LCA_YGB: Largest contiguous area of ridge flow - yellow or better (sq.mm.)
+LCA_GRF: Largest contiguous area of good ridge flow - green or better (sq.mm.)
+AM_Y: Automated minutiae (yellow areas)
+AM_G: Automated minutiae (green areas)
+AM_B: Automated minutiae (blue areas)
+
+
+.SH OPTIONS
+.TP
+\-v, --verbose
+Verbose mode. Prints detailed quality metrics as a single line of tab-separated text.
+.TP
+\-h, --headers
+Prints descriptive headers for the output metrics. The headers and metrics are each one line of tab-separated text.
+.TP
+--version
+Prints version and license information.
+.TP
+\-p <ppi>, --ppi <ppi>
+Overrides the resolution of the input image, as measured in pixels per inch (ppi).
+Valid values are 500, 1000, 2000, and 4000.
+.SH EXAMPLES
+Print quality metrics for an image:
+.RS
+$ OpenLQM my_image.png
+.RE
+Print verbose output with headers:
+.RS
+$ OpenLQM -v -h my_image.png
+.RE
+Set a custom ppi if the image metadata is missing:
+.RS
+$ OpenLQM -p 1000 my_image.png
+.RE
+Display version information:
+.RS
+$ OpenLQM --version
+.RE

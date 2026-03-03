@@ -1,0 +1,12 @@
+{
+  "dependencies": [
+    "freeimage",
+    "opencv4"
+  ],
+  "overrides": [
+    {
+      "name": "opencv4",
+      "version": "4.12.0"
+    }
+  ]
+}

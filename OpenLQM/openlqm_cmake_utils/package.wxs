@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CPackWiXPatch>
+  <CPackWiXFragment Id="CM_CP_bin.openlqm.exe">
+        <Environment
+            Id="BinPathEnv"
+            Name="PATH"
+            Value="[CM_DP_bin]"
+            Permanent="no"
+            System="yes"
+            Action="set"
+            Part="last"/>
+        <Environment
+            Id="OpenLQMPathEnv"
+            Name="OPENLQM_PATH"
+            Value="[CM_DP_bin]"
+            Permanent="no"
+            System="yes"
+            Action="set"
+            Part="all"/>
+  </CPackWiXFragment>
+</CPackWiXPatch>

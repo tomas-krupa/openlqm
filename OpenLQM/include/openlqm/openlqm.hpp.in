@@ -1,0 +1,277 @@
+﻿/*
+* Copyright 2025 Noblis, Inc.
+* https://fingerprint.nist.gov/openlqm
+* 
+* Licensed under the Apache License, Version 2.0 (the "License"); you may not
+* use this file except in compliance with the License. You may obtain a copy of
+* the License at https://www.apache.org/licenses/LICENSE-2.0.
+* 
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+* WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+* License for the specific language governing permissions and limitations under
+* the License.
+* 
+* OpenLQM was developed by Noblis, Inc. under contract to the National
+* Institute of Standards and Technology in 2024-2025, as a port of "LQMetric,"
+* which was developed by Noblis, Inc. under contract to the Federal Bureau of
+* Investigation's Criminal Justice Information Services Division in 2012-2014.
+*/
+
+#pragma once
+
+#include <vector>
+#include <string>
+#include <cstdint>
+
+#if defined(_WIN32) || defined(__MINGW32__) || defined(__CYGWIN__)
+	// Windows
+	#ifdef OPENLQM_EXPORTS
+		#define OPENLQM_API __declspec(dllexport)
+	#else
+		#define OPENLQM_API __declspec(dllimport)
+	#endif
+
+	#ifdef USE_STDCALL
+		#define OPENLQM_API_IMPL __stdcall
+	#else
+		#define OPENLQM_API_IMPL
+	#endif
+#else
+	// Linux/Mac
+	#if __GNUC__ >= 4
+		#define OPENLQM_API __attribute__((visibility("default")))
+	#else
+		#define OPENLQM_API
+	#endif
+
+	#define OPENLQM_API_IMPL
+#endif
+
+#define OPENLQM_API_DECL OPENLQM_API OPENLQM_API_IMPL
+
+namespace OpenLQM {
+	constexpr inline unsigned int VERSION_MAJOR = @PROJECT_VERSION_MAJOR@;
+	constexpr inline unsigned int VERSION_MINOR = @PROJECT_VERSION_MINOR@;
+	constexpr inline unsigned int VERSION_PATCH = @PROJECT_VERSION_PATCH@;
+	const inline std::string VERSION = "@PROJECT_VERSION@";
+
+	/**
+	 * @brief Supported pixel densities (PPI)
+	 */
+	enum class PixelDensity : unsigned int {
+		ppiInvalid = 0,
+		ppi500 = 500,   /**< 500 pixels per inch */
+		ppi1000 = 1000, /**< 1000 pixels per inch */
+		ppi2000 = 2000, /**< 2000 pixels per inch */
+		ppi4000 = 4000  /**< 4000 pixels per inch */
+	};
+
+	/**
+	 * @brief Supported pixel bit depths
+	 */
+	enum class PixelBitDepth : unsigned int {
+		depth8 = 8,  /**< 8 bits per pixel */
+		depth16 = 16 /**< 16 bits per pixel */
+	};
+
+	/**
+	 * @brief A pair of integer coordinates. When used to reference image pixels, assumes the image is in row-major order in memory, where (0, 0) is the top-left, and (x, y) means (column, row)
+	 */
+	struct Coordinate {
+		int x; /**< x-coordinate (column) */
+		int y; /**< y-coordinate (row) */
+	};
+
+	/**
+	 * @brief An input image prepared for processing
+	 */
+	struct Fingerprint {
+		std::vector<std::uint8_t> buffer;   /**< Raw image buffer */
+		unsigned int width;                 /**< Image width in pixels */
+		unsigned int height;			    /**< Image height in pixels */
+		PixelDensity resolution;            /**< Image pixel density (PPI) */
+		PixelBitDepth bitDepth;				/**< Bit depth */
+		unsigned int bitsPerPixel;			/**< Number of bits per pixel */
+		std::vector<Coordinate> roi;		/**< Region of interest. The list of coordinates  is interpreted as a convex polygon */
+
+		/**
+		 * @brief Load fingerprint image from a file
+		 * @param filePath Path to the fingerprint image
+		 * @param resolutionOverride Resolution to associate with the image, disregarding any PPI metadata the image might contain
+		 */
+		void OPENLQM_API_DECL LoadFromFilePath(const std::string& filePath, OpenLQM::PixelDensity resolutionOverride = OpenLQM::PixelDensity::ppiInvalid);
+
+		/**
+		 * @brief Set image region of interest
+		 * @param coordinates List of coordinates defining a convex polygon
+		 */
+		void SetRoi(const std::vector<Coordinate>& coordinates);
+	};
+
+	/**
+	 * @brief A set of metrics computed on a Fingerprint and its quality map
+	 */
+	struct Metrics {
+		int overallQuality;                          /**< Overall fingerprint quality */
+		int vid;                                     /**< Value for individualization */
+		int vcmp;                                    /**< Value for comparison */
+		int overallClarity;                          /**< Overall fingerprint clarity */
+		double areaOfImpression;                     /**< Area of entire fingerprint region */
+		double areaOfRidgeFlow;                      /**< Area of fingerprint region of at least low quality */
+		double areaOfGoodRidgeFlow;                  /**< Area of fingerprint region of at least good quality */
+		double areaOfClearLevel3Detail;              /**< Area of fingerprint region of at least high quality */
+		double largestContiguousAreaOfRidgeFlow;     /**< Area of largest contiguous region of at least low quality */
+		double largestContiguousAreaOfGoodRidgeFlow; /**< Area of largest contiguous region of at least good quality */
+		int automatedMinutiaeYellow;                 /**< Number of low quality minutiae */
+		int automatedMinutiaeGreen;                  /**< Number of good quality minutiae */
+		int automatedMinutiaeBlue;                   /**< Number of high quality minutiae */
+	};
+
+	/**
+	 * @brief A feature map (2D matrix with scalar values) derived from a Fingerprint
+	 */
+	struct FeatureMap {
+		unsigned int width;  /**< Width (columns) */
+		unsigned int height; /**< Height (rows) */
+	};
+
+	/**
+	 * @brief A templated subclass of FeatureMap containing the raw buffer holding the row-major 2D matrix with top-left at (0, 0)
+	 * 
+	 * @tparam T The cell's data type
+	 */
+	template <typename T>
+	struct FeatureMapBase : public FeatureMap {
+		std::vector<T> buffer;  /**< the raw buffer holding the row-major 2D matrix with top-left at (0, 0) */
+	};
+
+	using ByteMap = FeatureMapBase<std::uint8_t>;
+	using DoubleMap = FeatureMapBase<double>;
+	using QualityMap = ByteMap;
+
+	/**
+	 * @brief Compute and get all Metrics from a Fingerprint
+	 * @param inpImg Fingerprint instance (can be loaded via Fingerprint::LoadFromFilePath)
+	 * @param metrics Out parameter where the metrics are written
+	 */
+	void OPENLQM_API_DECL GetAllMetricsFromFingerprint(const OpenLQM::Fingerprint& inpImg, OpenLQM::Metrics& metrics);
+	/**
+	 * @brief Compute and return the latent quality value from a Fingerprint
+	 * @param inpImg Fingerprint instance (can be loaded via Fingerprint::LoadFromFilePath)
+	 * @param metrics Out parameter where the metrics are written
+	 * @return The latent quality value (0-99)
+	 */
+	int OPENLQM_API_DECL GetLatentQualityFromFingerprint(const OpenLQM::Fingerprint& inpImg);
+	/**
+	 * @brief Compute the quality map of a Fingerprint and write it to the out parameter
+	 * @param inpImg Fingerprint instance (can be loaded via Fingerprint::LoadFromFilePath)
+	 * @param qualMap Out parameter where the quality map is written
+	 */
+	void OPENLQM_API_DECL GetQualityMapFromFingerprint(const OpenLQM::Fingerprint& inpImg, OpenLQM::QualityMap& qualMap);
+	/**
+	 * @brief Compute the quality map and metrics of a Fingerprint and write both to the out parameters
+	 * @param inpImg Fingerprint instance (can be loaded via Fingerprint::LoadFromFilePath)
+	 * @param metrics Out parameter where the metrics are written
+	 * @param qualMap Out parameter where the quality map is written
+	 */
+	void OPENLQM_API_DECL GetAllMetricsAndQualityMapFromFingerprint(const OpenLQM::Fingerprint& inpImg, OpenLQM::Metrics& metrics, OpenLQM::QualityMap& qualMap);
+	/**
+	 * @brief Compute the metrics of a Fingerprint with a manually-supplied quality map and write the metrics to the out parameter
+	 * @param inpImg Fingerprint instance (can be loaded via Fingerprint::LoadFromFilePath)
+	 * @param metrics Out parameter where the metrics are written
+	 * @param qualMap The manually supplied quality map
+	 */
+	void OPENLQM_API_DECL GetAllMetricsFromFingerprintAndQualityMap(const OpenLQM::Fingerprint& inpImg, OpenLQM::Metrics& metrics, const OpenLQM::QualityMap& qualMap);
+	/**
+	 * @brief Convert a coordinate in a quality (or feature) map to the equivalent coordinate in a Fingerprint
+	 * @param qualCoord Coordinate in quality/feature map
+	 * @param fingerprintCoord Out parameter for the fingerprint coordinate
+	 * @param fingerprintResolution The resolution (PPI) of the fingerprint image
+	 */
+	void OPENLQM_API_DECL ConvertQualityMapCoordinateToFingerprintCoordinate(const OpenLQM::Coordinate& qualCoord, OpenLQM::Coordinate& fingerprintCoord, OpenLQM::PixelDensity fingerprintResolution);
+	/**
+	 * @brief Convert a coordinate in a Fingerprint image to the equivalent coordinate in a  quality (or feature) map
+	 * @param fingerprint Fingerprint instance (can be loaded via Fingerprint::LoadFromFilePath)
+	 * @param fingerprintCoord Fingerprint coordinate
+	 * @param qualCoord Out parameter for the quality/feature coordinate
+	 */
+	void OPENLQM_API_DECL ConvertFingerprintCoordinateToQualityMapCoordinate(const OpenLQM::Fingerprint& fingerprint, const OpenLQM::Coordinate& fingerprintCoord, OpenLQM::Coordinate& qualCoord);
+
+	namespace Supplement {
+		/**
+		 * @brief A collection of feature maps returned when all feature maps are requested
+		 */
+		struct FeatureMaps {
+			ByteMap curvature; /**< Curvature map */
+			ByteMap direction; /**< Direction map */
+			ByteMap grayCount; /**< grayCount map */
+			ByteMap grayMedian; /**< grayMedian map */
+			ByteMap grayRange; /**< grayRange map */
+			DoubleMap lowFreqMag; /**< lowFreqMag map */
+			DoubleMap maxMag; /**< maxMag map */
+			DoubleMap normMag; /**< normMag map */
+			ByteMap validNeighbors; /**< valiNeighbors map */
+			QualityMap quality; /**< quality map */
+		};
+
+		/**
+		 * @brief A collection of quality measures that are used to compute overall quality
+		 */
+		struct QualityMeasures {
+			double Area3plus;       /**< Area of good or better quality */
+			double Area3plusDiv2;   /**< Area of good or better quality divided by total area */
+			double GFA3plus;        /**< Area of good or better flow */
+			double LCA1plus;        /**< Largest contiguous area */
+			double LCA3plus;        /**< Largest contiguous area of good or better quality */
+			int Min2;               /**< Number of low quality minutiae */
+			int Min2plus;           /**< Number of low or better quality minutiae */
+			int Min4;               /**< Number of high quality minutiae */
+		};
+
+		/**
+		 * @brief Convert a coordinate in a Fingerprint image to the equivalent coordinate in a  quality (or feature) map
+		 * @param inpImg Fingerprint instance (can be loaded via Fingerprint::LoadFromFilePath)
+		 * @param featureMaps Out parameter containing feature maps
+		 */
+		void OPENLQM_API_DECL GetAllLowLevelClarityFeatureMapsFromFingerprint(const OpenLQM::Fingerprint& inpImg, OpenLQM::Supplement::FeatureMaps& featureMaps);
+		/**
+		 * @brief Determine if an input image is not a fingerprint
+		 * @param inpImg Fingerprint instance (can be loaded via Fingerprint::LoadFromFilePath)
+		 * @return true if is not a fingerprint, otherwise false
+		 */
+		bool OPENLQM_API_DECL IsImageNonFingerprint(const OpenLQM::Fingerprint& inpImg);
+		/**
+		 * @brief Get quality measures from a fingerprint image and quality map
+		 * @param inpImg Fingerprint instance (can be loaded via Fingerprint::LoadFromFilePath)
+		 * @param qualMap input quality map
+		 * @param qualityMeasures Out parameter where quality measures are written
+		 */
+		void OPENLQM_API_DECL GetQualityMeasuresFromFingerprintAndQualityMap(const OpenLQM::Fingerprint& inpImg, const OpenLQM::QualityMap& qualMap, OpenLQM::Supplement::QualityMeasures& qualityMeasures);
+		/**
+		 * @brief Get latent quality value from quality measures
+		 * @param qualityMeasures Input quality measures
+		 * @return latent quality value
+		 */
+		int OPENLQM_API_DECL GetLatentQualityFromQualityMeasures(const OpenLQM::Supplement::QualityMeasures& qualityMeasures);
+		/**
+		 * @brief Load a random forest model
+		 * @param modelPath path to model on disk
+		 * @return true if succeeded, otherwise false and last successful model remains loaded
+		 */
+		bool OPENLQM_API_DECL LoadModel(std::string modelPath);
+
+		/**
+		 * @brief Print metrics to stdout in the same format as the OpenLQM executable
+		 * @param metrics Metrics containing results from prior processing
+		 * @param inputPath The path of the input image used to compute the metrics
+		 * @param verbose Enables verbose output of full metrics
+		 * @param printHeaders Enables header output above the values
+		 */
+		void OPENLQM_API_DECL PrintMetrics(const OpenLQM::Metrics& metrics, const std::string& inputPath, bool verbose, bool printHeaders);
+	}
+}
+
+#ifdef OPENLQM_EXPORTS
+#include <openlqm/openlqm_impl.hpp>
+#endif
