@@ -1,4 +1,4 @@
-# OpenLQM <img src="OpenLQM/openlqm_cmake_utils/nist_itl_two_color.svg" align="right" alt="NIST Information Technology Laboratory" style="width:250px;" />
+# OpenLQM <img src="OpenLQM/openlqm_cmake_utils/nist_spo_two_color.svg" align="right" alt="NIST Information Technology Laboratory" style="width:250px;" />
 
 About
 -----
