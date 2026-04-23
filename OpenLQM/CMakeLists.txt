@@ -264,7 +264,7 @@ endif()
 
 set(CPACK_PACKAGE_NAME OpenLQM)
 set(CPACK_PACKAGE_VENDOR NIST)
-set(CPACK_PACKAGE_VERSION 1.0.0)
+set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
 set(CPACK_PACKAGE_CONTACT OpenLQM@list.nist.gov)
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "OpenLQM - A C++ library and CLI for fingerprint analysis")
 set(CPACK_PACKAGE_HOMEPAGE_URL "https://fingerprint.nist.gov/openlqm")
