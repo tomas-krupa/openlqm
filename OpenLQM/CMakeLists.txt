@@ -50,8 +50,6 @@ string(REPLACE "," ";" OPENCV_REQUIRED_COMPONENT_TARGETS "${OPENCV_REQUIRED_COMP
 
 message(STATUS "VCPKG_INSTALLED_DIR=${VCPKG_INSTALLED_DIR}")
 find_package(OpenCV ${MINIMUM_OPENCV_VERSION} COMPONENTS ${OPENCV_REQUIRED_COMPONENTS})
-find_package(freeimage REQUIRED)
-
 string(TOUPPER ${CMAKE_BUILD_TYPE} build_type_all_caps)
 set(IMPORTED_LOCATION_CONFIG_VAR "IMPORTED_LOCATION_${build_type_all_caps}")
 
@@ -117,7 +115,7 @@ endif()
 target_compile_definitions(olqm PRIVATE OPENLQM_EXPORTS)
 
 # Link opencv to the OpenLQM libary
-target_link_libraries(olqm PRIVATE ${OpenCV_LIBS} freeimage::FreeImage)
+target_link_libraries(olqm PRIVATE ${OpenCV_LIBS})
 
 # Add source to this project's executable.
 add_executable(OpenLQM main.cpp)

@@ -32,7 +32,7 @@
 #include <stack>
 #include <tuple>
 #include <stdio.h>
-#include <FreeImage.h>
+#include <cstdint>
 #include <sstream>
 #include <iostream>
 #include <string>
@@ -115,7 +115,6 @@ namespace OpenLQM {
 		struct GlobalInitializer {
 			GlobalInitializer() {
 				cv::utils::logging::setLogLevel(cv::utils::logging::LOG_LEVEL_SILENT);
-				FreeImage_Initialise();
 			}
 		};
 
@@ -240,12 +239,150 @@ namespace OpenLQM {
 
 OpenLQM::Core::GlobalInitializer globalInit;
 
+static unsigned int ReadDotsPerMeterX(const std::vector<unsigned char>& data)
+{
+    const std::size_t sz = data.size();
+    if (sz < 8) return 0;
+
+    // ---- JPEG (FF D8) ----
+    if (data[0] == 0xFF && data[1] == 0xD8) {
+        std::size_t pos = 2;
+        while (pos + 4 <= sz) {
+            if (data[pos] != 0xFF) break;
+            uint8_t marker = data[pos + 1];
+            if (marker == 0xD9 || marker == 0xDA) break; // EOI / SOS
+            uint16_t segLen = (static_cast<uint16_t>(data[pos + 2]) << 8) | data[pos + 3];
+            if (segLen < 2 || pos + 2 + segLen > sz) break;
+
+            if (marker == 0xE0 && segLen >= 16 &&
+                data[pos+4]=='J' && data[pos+5]=='F' && data[pos+6]=='I' && data[pos+7]=='F') {
+                uint8_t units = data[pos + 11];
+                uint16_t xd = (static_cast<uint16_t>(data[pos + 12]) << 8) | data[pos + 13];
+                if (xd > 0) {
+                    if (units == 1) return static_cast<unsigned int>(
+                        static_cast<unsigned long>(xd) * 10000UL / 254UL); // dpi → dpm
+                    if (units == 2) return static_cast<unsigned int>(xd) * 100U; // dpcm → dpm
+                }
+            }
+            if (marker == 0xE1 && segLen >= 18 &&
+                data[pos+4]=='E' && data[pos+5]=='x' && data[pos+6]=='i' && data[pos+7]=='f') {
+                std::size_t exifBase = pos + 10; // past "Exif\0\0"
+                if (exifBase + 8 > sz) { pos += 2 + segLen; continue; }
+                bool le = (data[exifBase] == 0x49);
+                auto u16 = [&](std::size_t o) -> uint16_t {
+                    if (o + 2 > sz) return 0;
+                    return le ? (data[o] | (uint16_t(data[o+1]) << 8))
+                              : ((uint16_t(data[o]) << 8) | data[o+1]);
+                };
+                auto u32 = [&](std::size_t o) -> uint32_t {
+                    if (o + 4 > sz) return 0;
+                    return le ? (data[o] | (uint32_t(data[o+1]) << 8) |
+                                 (uint32_t(data[o+2]) << 16) | (uint32_t(data[o+3]) << 24))
+                              : ((uint32_t(data[o]) << 24) | (uint32_t(data[o+1]) << 16) |
+                                 (uint32_t(data[o+2]) << 8) | data[o+3]);
+                };
+                std::size_t ifdOff = exifBase + u32(exifBase + 4);
+                if (ifdOff + 2 > sz) { pos += 2 + segLen; continue; }
+                uint16_t nEntries = u16(ifdOff);
+                double xRes = 0.0; uint16_t resUnit = 2;
+                for (uint16_t i = 0; i < nEntries; ++i) {
+                    std::size_t e = ifdOff + 2 + i * 12;
+                    if (e + 12 > sz) break;
+                    uint16_t tag  = u16(e);
+                    uint16_t type = u16(e + 2);
+                    uint32_t voff = u32(e + 8);
+                    if (tag == 282 && type == 5) { // XResolution RATIONAL
+                        std::size_t roff = exifBase + voff;
+                        uint32_t num = u32(roff), den = u32(roff + 4);
+                        if (den) xRes = double(num) / den;
+                    }
+                    if (tag == 296 && type == 3) resUnit = u16(e + 8);
+                }
+                if (xRes > 0.0) {
+                    if (resUnit == 2) return unsigned(xRes * 10000.0 / 254.0 + 0.5);
+                    if (resUnit == 3) return unsigned(xRes * 100.0 + 0.5);
+                }
+            }
+            pos += 2 + segLen;
+        }
+        return 0;
+    }
+
+    // ---- PNG (89 50 4E 47) ----
+    if (data[0]==0x89 && data[1]==0x50 && data[2]==0x4E && data[3]==0x47) {
+        std::size_t pos = 8;
+        while (pos + 12 <= sz) {
+            uint32_t chunkLen = (uint32_t(data[pos])<<24) | (uint32_t(data[pos+1])<<16) |
+                                (uint32_t(data[pos+2])<<8) | data[pos+3];
+            if (pos + 12 + chunkLen > sz) break;
+            if (data[pos+4]=='p' && data[pos+5]=='H' && data[pos+6]=='Y' && data[pos+7]=='s'
+                && chunkLen == 9) {
+                uint32_t xdpm = (uint32_t(data[pos+8])<<24) | (uint32_t(data[pos+9])<<16) |
+                                (uint32_t(data[pos+10])<<8) | data[pos+11];
+                uint8_t unit = data[pos + 16];
+                if (unit == 1) return xdpm;
+            }
+            if (data[pos+4]=='I' && data[pos+5]=='D' && data[pos+6]=='A' && data[pos+7]=='T') break;
+            pos += 12 + chunkLen;
+        }
+        return 0;
+    }
+
+    // ---- BMP (42 4D) ----
+    if (data[0] == 0x42 && data[1] == 0x4D) {
+        if (sz < 42) return 0;
+        int32_t xppm = int32_t(data[38]) | (int32_t(data[39]) << 8) |
+                       (int32_t(data[40]) << 16) | (int32_t(data[41]) << 24);
+        return xppm > 0 ? static_cast<unsigned int>(xppm) : 0;
+    }
+
+    // ---- TIFF (49 49 2A 00 / 4D 4D 00 2A) ----
+    if ((data[0]==0x49 && data[1]==0x49 && data[2]==0x2A && data[3]==0x00) ||
+        (data[0]==0x4D && data[1]==0x4D && data[2]==0x00 && data[3]==0x2A)) {
+        bool le = (data[0] == 0x49);
+        auto u16 = [&](std::size_t o) -> uint16_t {
+            if (o + 2 > sz) return 0;
+            return le ? (data[o] | (uint16_t(data[o+1]) << 8))
+                      : ((uint16_t(data[o]) << 8) | data[o+1]);
+        };
+        auto u32 = [&](std::size_t o) -> uint32_t {
+            if (o + 4 > sz) return 0;
+            return le ? (data[o] | (uint32_t(data[o+1]) << 8) |
+                         (uint32_t(data[o+2]) << 16) | (uint32_t(data[o+3]) << 24))
+                      : ((uint32_t(data[o]) << 24) | (uint32_t(data[o+1]) << 16) |
+                         (uint32_t(data[o+2]) << 8) | data[o+3]);
+        };
+        std::size_t ifdOff = u32(4);
+        if (ifdOff + 2 > sz) return 0;
+        uint16_t nEntries = u16(ifdOff);
+        double xRes = 0.0; uint16_t resUnit = 2;
+        for (uint16_t i = 0; i < nEntries; ++i) {
+            std::size_t e = ifdOff + 2 + i * 12;
+            if (e + 12 > sz) break;
+            uint16_t tag  = u16(e);
+            uint16_t type = u16(e + 2);
+            uint32_t voff = u32(e + 8);
+            if (tag == 282 && type == 5) {
+                uint32_t num = u32(voff), den = u32(voff + 4);
+                if (den) xRes = double(num) / den;
+            }
+            if (tag == 296 && type == 3) resUnit = u16(e + 8);
+        }
+        if (xRes > 0.0) {
+            if (resUnit == 2) return unsigned(xRes * 10000.0 / 254.0 + 0.5);
+            if (resUnit == 3) return unsigned(xRes * 100.0 + 0.5);
+        }
+        return 0;
+    }
+
+    return 0;
+}
+
 void OPENLQM_API_IMPL OpenLQM::Fingerprint::LoadFromFilePath(const std::string& filePath, OpenLQM::PixelDensity resolutionOverride) {
 	FILE* pFile = fopen(filePath.c_str(), "rb");
 	if (!pFile) {
 		throw std::invalid_argument(std::string("Failed to open {") + filePath + "}");
 	}
-	int flags = 0;
 	std::vector<unsigned char> fileBytes;
 	char buf[2049];
 	buf[2048] = 0;
@@ -257,19 +394,8 @@ void OPENLQM_API_IMPL OpenLQM::Fingerprint::LoadFromFilePath(const std::string& 
 			fileBytes[i + lastSize] = static_cast<unsigned char>(buf[i]);
 		}
 	}
-	FIMEMORY* pMem = FreeImage_OpenMemory(fileBytes.data(), static_cast<unsigned long>(fileBytes.size()));
-	FREE_IMAGE_FORMAT fif = FreeImage_GetFileTypeFromMemory(pMem, static_cast<int>(fileBytes.size()));
-
-	FIBITMAP* pBitmap = FreeImage_LoadFromMemory(fif, pMem, flags);
-	if (!pBitmap) {
-		FreeImage_CloseMemory(pMem);
-		fclose(pFile);
-		throw std::invalid_argument(std::string("LoadFromFilePath failed to decode file (") + filePath + ")");
-	}
-	unsigned int dpmX = FreeImage_GetDotsPerMeterX(pBitmap);
+	unsigned int dpmX = ReadDotsPerMeterX(fileBytes);
 	const float INCHES_PER_METER = 39.3701f;
-	FreeImage_CloseMemory(pMem);
-	FreeImage_Unload(pBitmap);
 	fclose(pFile);
 	float ppiF = OpenLQM::Core::ClampResolution(dpmX / INCHES_PER_METER);
 	int ppi = std::lrint(ppiF);
