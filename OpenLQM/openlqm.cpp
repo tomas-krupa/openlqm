@@ -295,8 +295,6 @@ void OPENLQM_API_IMPL OpenLQM::Fingerprint::LoadFromFilePath(const std::string& 
 	} else {
 		throw std::invalid_argument(std::string("Invalid input resolution (") + std::to_string(ppi) + "). Must be approximately 500, 1000, 2000, or 4000 pixels per inch");
 	}
-	this->buffer.resize(this->width * this->height);
-	memcpy(this->buffer.data(), inputMat.data, this->buffer.size());
 
 	switch (inputMat.depth()) {
 	case CV_8U:
@@ -311,6 +309,13 @@ void OPENLQM_API_IMPL OpenLQM::Fingerprint::LoadFromFilePath(const std::string& 
 	}
 	this->bitsPerPixel = inputMat.elemSize1() * inputMat.channels() * 8;
 
+	this->buffer.resize(this->width * this->height *
+	    (this->bitsPerPixel / 8));
+	if ((inputMat.total() * inputMat.elemSize()) != this->buffer.size())
+		throw std::runtime_error{"Unexpected buffer size mismatch (" +
+		    std::to_string(inputMat.total() * inputMat.elemSize()) +
+		    ", " + std::to_string(this->buffer.size()) + ")"};
+	memcpy(this->buffer.data(), inputMat.data, this->buffer.size());
 }
 
 void OpenLQM::Fingerprint::SetRoi(const std::vector<OpenLQM::Coordinate>& coordinates) {
