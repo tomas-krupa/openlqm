@@ -54,7 +54,7 @@ mkdir build
 cd build
 
 # Build and package
-cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE="${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" # Windows, add: -DCMAKE_CONFIGURATION_TYPE=Release
+cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE="${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" # Windows, add: -DCMAKE_CONFIGURATION_TYPES=Release
 cmake --build . # Windows, add --config Release
 cpack
 ```
