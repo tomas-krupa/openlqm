@@ -298,8 +298,19 @@ void OPENLQM_API_IMPL OpenLQM::Fingerprint::LoadFromFilePath(const std::string& 
 	this->buffer.resize(this->width * this->height);
 	memcpy(this->buffer.data(), inputMat.data, this->buffer.size());
 
-	this->bitDepth = PixelBitDepth::depth8;
-	this->bitsPerPixel = 8;
+	switch (inputMat.depth()) {
+	case CV_8U:
+		this->bitDepth = PixelBitDepth::depth8;
+		break;
+	case CV_16U:
+		this->bitDepth = PixelBitDepth::depth16;
+		break;
+	default:
+		throw std::runtime_error{"Unsupported image depth (inputMat."
+		    "depth == " + std::to_string(inputMat.depth()) + ")"};
+	}
+	this->bitsPerPixel = inputMat.elemSize1() * inputMat.channels() * 8;
+
 }
 
 void OpenLQM::Fingerprint::SetRoi(const std::vector<OpenLQM::Coordinate>& coordinates) {
