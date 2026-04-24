@@ -307,7 +307,11 @@ void OPENLQM_API_IMPL OpenLQM::Fingerprint::LoadFromFilePath(const std::string& 
 		throw std::runtime_error{"Unsupported image depth (inputMat."
 		    "depth == " + std::to_string(inputMat.depth()) + ")"};
 	}
-	this->bitsPerPixel = inputMat.elemSize1() * inputMat.channels() * 8;
+	if (inputMat.channels() <= 0)
+		throw std::runtime_error{"Unexpected number of channels: " +
+		    std::to_string(inputMat.channels())};
+	this->bitsPerPixel = inputMat.elemSize1() *
+	    static_cast<size_t>(inputMat.channels()) * 8;
 
 	this->buffer.resize(this->width * this->height *
 	    (this->bitsPerPixel / 8));
