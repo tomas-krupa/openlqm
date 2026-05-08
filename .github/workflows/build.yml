@@ -12,6 +12,15 @@ on:
       - 'NOTICE.txt'
       - 'OpenLQM/openlqm.1'
       - 'README.md'
+  pull_request:
+    paths-ignore:
+      - '.github/**'
+      - '!.github/workflows/build.yml'
+      - '.gitignore'
+      - 'LICENSE.txt'
+      - 'NOTICE.txt'
+      - 'OpenLQM/openlqm.1'
+      - 'README.md'
 
 jobs:
   build:
